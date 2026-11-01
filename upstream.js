@@ -420,11 +420,11 @@ const BROWSER_UA =
  */
 const PROBE_VARIANTS = [
   { label: "configured curl", args: [] },
+  { label: "configured curl, no UA header", args: [], omitUa: true },
+  { label: "configured curl + browser UA", args: [], ua: BROWSER_UA },
+  { label: "configured curl --http1.1", args: ["--http1.1"] },
   { label: "system curl", args: [], bin: SYSTEM_CURL },
-  { label: "--http1.1", args: ["--http1.1"] },
-  { label: "--tls-max 1.2", args: ["--tls-max", "1.2"] },
-  { label: "--http1.1 + browser UA", args: ["--http1.1"], ua: BROWSER_UA },
-  { label: "--http1.1 + no UA", args: ["--http1.1"], omitUa: true },
+  { label: "system curl --tls-max 1.2", args: ["--tls-max", "1.2"], bin: SYSTEM_CURL },
 ];
 
 /** Stops the probe listing the same binary twice when nothing was overridden. */
