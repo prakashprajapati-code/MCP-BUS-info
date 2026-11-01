@@ -1,0 +1,35 @@
+{
+  "name": "gsrtc-mcp",
+  "version": "1.0.0",
+  "description": "MCP server for GSRTC (Gujarat) bus lists - stdio and Streamable HTTP",
+  "main": "server.js",
+  "bin": {
+    "gsrtc-mcp": "index.js"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "start:stdio": "node index.js",
+    "check": "node test/check.js",
+    "test": "node --test test/stdio.test.js",
+    "test:live": "node --test test/live.test.js",
+    "test:http": "node --test test/http.test.js",
+    "test:all": "npm run check && npm test && npm run test:http"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "keywords": [
+    "mcp",
+    "gsrtc",
+    "bus",
+    "gujarat"
+  ],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "@modelcontextprotocol/server": "^2.4.0",
+    "dotenv": "^18.0.9",
+    "zod": "^4.6.7"
+  }
+}
