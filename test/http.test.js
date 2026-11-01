@@ -60,6 +60,9 @@ test("http: routes and auth", { timeout: 120_000 }, async (t) => {
   const deep = await fetch(`${base}/health?deep=1`);
   assert.equal(deep.status, 401);
 
+  const probe = await fetch(`${base}/health?probe=1`);
+  assert.equal(probe.status, 401);
+
   const unauthorized = await fetch(`${base}/mcp`, {
     method: "POST",
     headers: { "content-type": "application/json", accept: "application/json, text/event-stream" },

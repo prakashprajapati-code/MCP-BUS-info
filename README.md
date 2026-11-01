@@ -80,6 +80,7 @@ Health:
 
 - `GET /health` — public liveness, no upstream call
 - `GET /health?deep=1` — upstream nonce/bearer check; requires the token when `MCP_AUTH_TOKEN` is set
+- `GET /health?probe=1` — transport matrix: runs the nonce call under several curl flag sets (plus a Node `fetch` baseline) so a 403 can be attributed to TLS fingerprint vs host IP
 
 Free instances sleep after inactivity and cold-start in roughly 30–60 seconds, which can exceed an MCP client's startup timeout. Use a paid instance if that matters.
 

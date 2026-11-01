@@ -36,6 +36,7 @@ module.exports = {
   serviceTypes,
   getHealth: impl.getHealth,
   curlVersion: impl.curlVersion || (async () => "not available in http mode"),
+  probeTransport: impl.probeTransport || (async () => ({ error: "not available in http mode" })),
   getStationList: impl.getStationList,
   getBusList: impl.getBusList,
   getDepotBusList: impl.getDepotBusList,

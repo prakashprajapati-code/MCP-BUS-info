@@ -7,6 +7,7 @@
  *   GET  /            -> plain-text index of endpoints
  *   GET  /health      -> liveness only (no upstream call)
  *   GET  /health?deep=1 -> also runs the upstream self check
+ *   GET  /health?probe=1 -> transport matrix: which curl flags beat a 403
  *   *    /mcp         -> MCP endpoint (POST for JSON-RPC, GET for SSE)
  *
  * Local:  http://localhost:3001/mcp
@@ -111,6 +112,7 @@ const server = http.createServer(async (req, res) => {
           "",
           `MCP endpoint:  ${url.origin}/mcp`,
           "Health:        /health  (/health?deep=1 for an upstream check)",
+          "Transport:     /health?probe=1 (which curl flags get through)",
           `Mode:          ${MODE}`,
           `Auth:          ${AUTH_TOKEN ? "required (Bearer or ?key=)" : "open"}`,
         ].join("\n"),
@@ -119,6 +121,26 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (url.pathname === "/health") {
+      if (url.searchParams.get("probe") === "1") {
+        if (!authorised(req, url)) {
+          sendJson(res, 401, {
+            ok: false,
+            error: "Probe requires Authorization: Bearer <token> or ?key=<token>.",
+          });
+          return;
+        }
+
+        try {
+          sendJson(res, 200, { ok: true, ...(await api.probeTransport()) });
+        } catch (error) {
+          sendJson(res, 500, {
+            ok: false,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+        return;
+      }
+
       if (url.searchParams.get("deep") !== "1") {
         sendJson(res, 200, {
           ok: true,

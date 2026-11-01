@@ -105,7 +105,7 @@ async function upstreamFailure(label, res, parsed) {
  * One curl call. The body is written to a temp file and sent with
  * --data-binary @file (Windows argument quoting mangles inline JSON).
  */
-async function runCurl(method, url, headers, body) {
+async function runCurl(method, url, headers, body, extraArgs = []) {
   const files = [];
   const add = (tag) => {
     const file = tmpFile(tag);
@@ -137,6 +137,7 @@ async function runCurl(method, url, headers, body) {
 
     // Escape hatch for hosts the edge rejects: --http1.1, --tls-max 1.2, ...
     if (CURL_EXTRA.length) args.push(...CURL_EXTRA);
+    if (extraArgs.length) args.push(...extraArgs);
 
     for (const [key, value] of Object.entries(headers || {})) {
       args.push("-H", `${key}: ${value}`);
@@ -404,6 +405,79 @@ async function curlVersion() {
   }
 }
 
+/* ------------------------------------------------------------------ probe */
+
+const BROWSER_UA =
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
+  "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
+
+/**
+ * Which transport shapes does this host get through with? One curl call per
+ * variant against the nonce endpoint, plus a Node fetch baseline.
+ * Used by GET /health?probe=1 to separate a TLS-fingerprint block from an
+ * IP block without redeploying for every flag.
+ */
+const PROBE_VARIANTS = [
+  { label: "default", args: [] },
+  { label: "--http1.1", args: ["--http1.1"] },
+  { label: "--tls-max 1.2", args: ["--tls-max", "1.2"] },
+  { label: "--http1.1 --tls-max 1.2", args: ["--http1.1", "--tls-max", "1.2"] },
+  { label: "--http1.1 + browser UA", args: ["--http1.1"], ua: BROWSER_UA },
+  { label: "--http1.1 + no UA", args: ["--http1.1"], omitUa: true },
+];
+
+async function probeTransport() {
+  const url = `${BASE_URL}/api/integrity/nonce`;
+  const results = [];
+
+  for (const variant of PROBE_VARIANTS) {
+    const started = Date.now();
+    const headers = variant.omitUa ? {} : { "User-Agent": variant.ua || UA };
+
+    try {
+      const res = await runCurl("GET", url, headers, undefined, variant.args);
+      const parsed = parseBody(res.body);
+      results.push({
+        variant: variant.label,
+        status: res.status,
+        http: httpVersionOf(res.headers),
+        nonce: Boolean(parsed.json && parsed.json.nonce),
+        ms: Date.now() - started,
+      });
+    } catch (error) {
+      results.push({
+        variant: variant.label,
+        status: 0,
+        error: String(error && error.message).slice(0, 160),
+        ms: Date.now() - started,
+      });
+    }
+  }
+
+  // Baseline: the Node runtime the upstream is supposed to block.
+  const started = Date.now();
+  try {
+    const res = await fetch(url, { headers: { "User-Agent": UA } });
+    results.push({ variant: "node fetch", status: res.status, ms: Date.now() - started });
+  } catch (error) {
+    results.push({
+      variant: "node fetch",
+      status: 0,
+      error: String(error && error.message).slice(0, 160),
+      ms: Date.now() - started,
+    });
+  }
+
+  return {
+    host: BASE_URL,
+    platform: `${process.platform} ${process.arch}`,
+    node: process.version,
+    curl: await curlVersion(),
+    curlExtra: CURL_EXTRA.join(" ") || "none",
+    results,
+  };
+}
+
 /** Proves the host can still reach the upstream without minting a token. */
 async function ensureReachable() {
   if (Date.now() - bearer.nonceAt < 30_000) return;
@@ -444,4 +518,5 @@ module.exports = {
   getNearbyDepots,
   getHealth,
   curlVersion,
+  probeTransport,
 };
