@@ -84,6 +84,14 @@ Health:
 
 Free instances sleep after inactivity and cold-start in roughly 30–60 seconds, which can exceed an MCP client's startup timeout. Use a paid instance if that matters.
 
+### Known limitation: cloud IPs are blocked
+
+The upstream edge refuses requests from datacenter IPs. Verified on Render (Singapore, Nov 2026) with `?probe=1` across system curl, Chrome-impersonating curl (curl-impersonate / BoringSSL), browser UA, no UA, HTTP/1.1, HTTP/1.0 and TLS 1.2 — **every variant returns 403**, while the same code works from a residential Indian connection.
+
+Symptoms: `/health` is green, `/mcp` handshakes fine, `tools/list` works, but every tool returns `nonce request failed (HTTP 403)`.
+
+Consequence: the server needs an egress IP the edge accepts. Run it on a residential connection behind a tunnel (Cloudflare Tunnel or Tailscale Funnel), which is what ChatGPT needs anyway, or on a host whose IP is not blocked — test with `/health?probe=1` before relying on it.
+
 ## Tools
 
 | Tool | Inputs | Purpose |
