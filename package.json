@@ -9,6 +9,7 @@
   "scripts": {
     "start": "node server.js",
     "start:stdio": "node index.js",
+    "postinstall": "node scripts/fetch-impersonate.js",
     "check": "node test/check.js",
     "test": "node --test test/stdio.test.js",
     "test:live": "node --test test/live.test.js",

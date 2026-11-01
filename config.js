@@ -1,6 +1,7 @@
 "use strict";
 
 const path = require("node:path");
+const fs = require("node:fs");
 
 /**
  * Configuration comes from the environment only. `.env` fills the gaps for
@@ -60,7 +61,31 @@ const TIMEOUT_SEC =
 
 const MAX_BUFFER = 10 * 1024 * 1024;
 
-const CURL = process.env.GSRTC_CURL || (process.platform === "win32" ? "curl.exe" : "curl");
+/**
+ * curl binary. On Linux, prefer the bundled Chrome-impersonating build when
+ * postinstall managed to fetch it: the plain OpenSSL curl gets a 403 from the
+ * upstream edge. An explicit GSRTC_CURL (anything but bare "curl") still wins.
+ */
+const SYSTEM_CURL = process.platform === "win32" ? "curl.exe" : "curl";
+const IMPERSONATE = path.join(__dirname, ".curl-impersonate", "curl_chrome116");
+
+function defaultCurl() {
+  if (process.platform === "win32") return SYSTEM_CURL;
+  try {
+    if (fs.existsSync(IMPERSONATE)) return IMPERSONATE;
+  } catch {
+    /* fall through */
+  }
+  return SYSTEM_CURL;
+}
+
+function curlBinary() {
+  const configured = String(process.env.GSRTC_CURL || "").trim();
+  if (configured && configured !== "curl" && configured !== "curl.exe") return configured;
+  return defaultCurl();
+}
+
+const CURL = curlBinary();
 
 const CURL_EXTRA = curlExtra();
 

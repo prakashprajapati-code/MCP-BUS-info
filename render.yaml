@@ -12,8 +12,6 @@ services:
         value: 22.11.0
       - key: GSRTC_MODE
         value: direct
-      - key: GSRTC_CURL
-        value: curl
       - key: GSRTC_TIMEOUT_SEC
         value: 30
       - key: GSRTC_TZ

@@ -46,6 +46,7 @@ const { GsrtcError } = require("./errors.js");
 
 const run = promisify(execFile);
 const DETAIL_CHARS = 300;
+const SYSTEM_CURL = process.platform === "win32" ? "curl.exe" : "curl";
 
 const log = (line) => process.stderr.write(`${line}\n`);
 
@@ -105,7 +106,7 @@ async function upstreamFailure(label, res, parsed) {
  * One curl call. The body is written to a temp file and sent with
  * --data-binary @file (Windows argument quoting mangles inline JSON).
  */
-async function runCurl(method, url, headers, body, extraArgs = []) {
+async function runCurl(method, url, headers, body, extraArgs = [], bin = CURL) {
   const files = [];
   const add = (tag) => {
     const file = tmpFile(tag);
@@ -149,7 +150,7 @@ async function runCurl(method, url, headers, body, extraArgs = []) {
       args.push("--data-binary", `@${bodyFile}`);
     }
 
-    const { stdout } = await run(CURL, args, { maxBuffer: MAX_BUFFER, windowsHide: true });
+    const { stdout } = await run(bin, args, { maxBuffer: MAX_BUFFER, windowsHide: true });
 
     return {
       status: Number.parseInt(String(stdout).trim(), 10) || 0,
@@ -418,24 +419,31 @@ const BROWSER_UA =
  * IP block without redeploying for every flag.
  */
 const PROBE_VARIANTS = [
-  { label: "default", args: [] },
+  { label: "configured curl", args: [] },
+  { label: "system curl", args: [], bin: SYSTEM_CURL },
   { label: "--http1.1", args: ["--http1.1"] },
   { label: "--tls-max 1.2", args: ["--tls-max", "1.2"] },
-  { label: "--http1.1 --tls-max 1.2", args: ["--http1.1", "--tls-max", "1.2"] },
   { label: "--http1.1 + browser UA", args: ["--http1.1"], ua: BROWSER_UA },
   { label: "--http1.1 + no UA", args: ["--http1.1"], omitUa: true },
 ];
+
+/** Stops the probe listing the same binary twice when nothing was overridden. */
+function probeVariants() {
+  return PROBE_VARIANTS.filter(
+    (variant) => !variant.bin || path.resolve(variant.bin) !== path.resolve(CURL),
+  );
+}
 
 async function probeTransport() {
   const url = `${BASE_URL}/api/integrity/nonce`;
   const results = [];
 
-  for (const variant of PROBE_VARIANTS) {
+  for (const variant of probeVariants()) {
     const started = Date.now();
     const headers = variant.omitUa ? {} : { "User-Agent": variant.ua || UA };
 
     try {
-      const res = await runCurl("GET", url, headers, undefined, variant.args);
+      const res = await runCurl("GET", url, headers, undefined, variant.args, variant.bin);
       const parsed = parseBody(res.body);
       results.push({
         variant: variant.label,
