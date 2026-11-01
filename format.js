@@ -386,6 +386,7 @@ function formatHealth(health) {
 
   if (health.platform) lines.push(`- Platform: ${health.platform} · node ${health.node || "—"}`);
   if (health.curl) lines.push(`- curl: ${health.curl}`);
+  if (health.curlExtra && health.curlExtra !== "none") lines.push(`- curl extra: ${health.curlExtra}`);
 
   lines.push(`- Bearer cached: ${bearer}`);
   lines.push(`- Nonce round-trip: ${ms}`);
@@ -414,6 +415,7 @@ function formatSelfCheck(info) {
   add("Platform", info.platform);
   add("Node", info.node);
   add("curl", info.curl);
+  add("curl extra", info.curlExtra === "none" ? undefined : info.curlExtra);
   add("Upstream", info.base);
   add("Nonce", info.nonce);
   add("Bearer", info.bearerCached === undefined ? undefined : info.bearerCached ? "cached" : "not cached");
@@ -423,6 +425,11 @@ function formatSelfCheck(info) {
   if (info.error) {
     lines.push("");
     lines.push(String(info.error));
+  }
+
+  if (info.hint) {
+    lines.push("");
+    lines.push(String(info.hint));
   }
 
   if (!ok) {

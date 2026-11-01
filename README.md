@@ -36,6 +36,7 @@ npm start            # HTTP on http://localhost:3001/mcp
 | `GSRTC_TIMEOUT_SEC` | no | `30` | Per-request curl timeout |
 | `GSRTC_TZ` | no | `Asia/Kolkata` | Timezone for "today" and past-time rollover |
 | `GSRTC_CURL` | no | `curl.exe` / `curl` | curl binary |
+| `GSRTC_CURL_EXTRA` | no | — | Extra curl flags, e.g. `--http1.1 --tls-max 1.2` |
 | `PORT` / `HOST` | no | `3001` / `0.0.0.0` | HTTP bind |
 | `MCP_AUTH_TOKEN` | no | unset | If set, `/mcp` and deep health require `Authorization: Bearer` or `?key=` |
 | `GSRTC_API_TIMEOUT_MS` | no | `90000` | http mode only |
@@ -127,3 +128,4 @@ npm run test:all    # check + test + test:http
 | `MCP server process exited` | Run `node index.js` by hand and read stderr |
 | Wrong "today" or an early/late rollover | Check `GSRTC_TZ`; Render runs UTC by default |
 | Upstream errors | Check `curl` is on `PATH`; `self_check` reports the curl version |
+| `nonce request failed (HTTP 403)` | The upstream edge rejected this host. `self_check` shows the curl build and HTTP version. Try `GSRTC_CURL_EXTRA=--http1.1`, then `--tls-max 1.2`, then both. If every flag and every region still 403s, the edge blocks that datacenter IP — run the server on a residential/India host or a tunnel from one. |

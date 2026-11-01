@@ -6,8 +6,14 @@
  * WHY curl INSTEAD OF fetch:
  *   The Google edge in front of the upstream host blocks Node/OpenSSL TLS
  *   fingerprints with a 403 page (verified: node fetch -> 403, curl -> 200).
- *   curl.exe on Windows and curl on Linux both get through. Do not "simplify"
- *   this to fetch/https - it will always be 403.
+ *   Do not "simplify" this to fetch/https - it will always be 403.
+ *
+ *   Some hosts still get a 403 (verified on Render's Linux curl). Failures
+ *   therefore report curl version + negotiated HTTP version, and
+ *   GSRTC_CURL_EXTRA can try alternatives without a code change:
+ *     GSRTC_CURL_EXTRA="--http1.1"
+ *     GSRTC_CURL_EXTRA="--tls-max 1.2"
+ *     GSRTC_CURL_EXTRA="--http1.1 --tls-max 1.2"
  *
  * AUTH FLOW:
  *   GET  /api/integrity/nonce                      (no headers needed)
@@ -24,6 +30,7 @@ const { promisify } = require("node:util");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
+const { randomBytes } = require("node:crypto");
 
 const {
   BASE_URL,
@@ -33,6 +40,7 @@ const {
   TIMEOUT_SEC,
   MAX_BUFFER,
   CURL,
+  CURL_EXTRA,
 } = require("./config.js");
 const { GsrtcError } = require("./errors.js");
 
@@ -63,6 +71,33 @@ function transportError(message, detail) {
   return new GsrtcError(
     `${message}${suffix}`,
     `Is curl installed? Set GSRTC_CURL if it lives elsewhere (tried "${CURL}").`,
+  );
+}
+
+/** "HTTP/2" or "HTTP/1.1" from curl's -D header dump. */
+function httpVersionOf(headers) {
+  const match = String(headers || "").match(/^HTTP\/([\d.]+)/m);
+  return match ? `HTTP/${match[1]}` : "HTTP version unknown";
+}
+
+/**
+ * Facts that separate a TLS-fingerprint block from an IP block: negotiated
+ * HTTP version, the curl build (Schannel vs OpenSSL), and any extra flags.
+ */
+async function describeTransport(res) {
+  const parts = [httpVersionOf(res.headers), await curlVersion()];
+  if (CURL_EXTRA.length) parts.push(`extra: ${CURL_EXTRA.join(" ")}`);
+  return parts.join(" · ");
+}
+
+/** Builds the error for a non-200 upstream reply and logs the breakdown. */
+async function upstreamFailure(label, res, parsed) {
+  const diag = await describeTransport(res);
+  log(`[gsrtc] ${label} failed: HTTP ${res.status} (${diag})`);
+
+  return new GsrtcError(
+    `${label} failed (HTTP ${res.status})`,
+    `${String(parsed.text || res.body).trim().slice(0, DETAIL_CHARS)}\n${diag}`,
   );
 }
 
@@ -99,6 +134,9 @@ async function runCurl(method, url, headers, body) {
 
     // Schannel-only flag; harmless on Linux, needed on Windows.
     if (process.platform === "win32") args.push("--ssl-no-revoke");
+
+    // Escape hatch for hosts the edge rejects: --http1.1, --tls-max 1.2, ...
+    if (CURL_EXTRA.length) args.push(...CURL_EXTRA);
 
     for (const [key, value] of Object.entries(headers || {})) {
       args.push("-H", `${key}: ${value}`);
@@ -170,22 +208,20 @@ async function fetchNonce() {
   const nonce = parsed.json && parsed.json.nonce;
 
   if (res.status !== 200 || !nonce) {
-    throw new GsrtcError(
-      `nonce request failed (HTTP ${res.status})`,
-      String(parsed.text || res.body).trim().slice(0, DETAIL_CHARS),
-    );
+    throw await upstreamFailure("nonce request", res, parsed);
   }
   return nonce;
 }
 
 async function fetchSession() {
+  const tokenIn = randomBytes(32).toString("hex");
   const res = await runCurl(
     "POST",
     `${BASE_URL}/api/integrity/session`,
     {
       "Content-Type": "application/json",
       "User-Agent": UA,
-      "X-Integrity-Token": "dummy",
+      "X-Integrity-Token": tokenIn,
       "X-Android-Id": ANDROID_ID,
     },
     "probe",
@@ -195,10 +231,7 @@ async function fetchSession() {
   const token = parsed.json && parsed.json.token;
 
   if (res.status !== 200 || !token) {
-    throw new GsrtcError(
-      `session request failed (HTTP ${res.status})`,
-      String(parsed.text || res.body).trim().slice(0, DETAIL_CHARS),
-    );
+    throw await upstreamFailure("session request", res, parsed);
   }
 
   let exp = jwtExpiryMs(token);
@@ -288,10 +321,7 @@ async function callData(endpoint, payload) {
   );
 
   if (res.status !== 200) {
-    throw new GsrtcError(
-      `upstream HTTP ${res.status} on ${endpoint}`,
-      String(parsed.text || res.body).trim().slice(0, DETAIL_CHARS),
-    );
+    throw await upstreamFailure(`${endpoint} request`, res, parsed);
   }
 
   return { rows, json: parsed.json, text: parsed.text, isJson: parsed.isJson };
@@ -398,6 +428,7 @@ async function getHealth() {
     platform: `${process.platform} ${process.arch}`,
     node: process.version,
     curl: await curlVersion(),
+    curlExtra: CURL_EXTRA.length ? CURL_EXTRA.join(" ") : "none",
     base: BASE_URL,
     nonce: "ok",
     bearerCached: Boolean(bearer.token && Date.now() < bearer.exp - 60_000),
@@ -412,4 +443,5 @@ module.exports = {
   getServiceTypes,
   getNearbyDepots,
   getHealth,
+  curlVersion,
 };

@@ -417,7 +417,21 @@ function registerTools(server) {
         return text(formatSelfCheck({ ...(await api.getHealth()), ...runtimeInfo() }));
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        return fail(formatSelfCheck({ ok: false, mode: api.MODE, error: message, ...runtimeInfo() }));
+        return fail(
+          formatSelfCheck({
+            ok: false,
+            mode: api.MODE,
+            error: message,
+            hint: error instanceof Error ? error.hint : undefined,
+            // Health failed before it could collect these, yet they are the
+            // whole point of a failed self check: which host, which curl build.
+            platform: `${process.platform} ${process.arch}`,
+            node: process.version,
+            curl: await api.curlVersion(),
+            curlExtra: api.CURL_EXTRA.length ? api.CURL_EXTRA.join(" ") : "none",
+            ...runtimeInfo(),
+          }),
+        );
       }
     },
   );

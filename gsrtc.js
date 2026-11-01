@@ -10,7 +10,7 @@
  * one is in use.
  */
 
-const { MODE } = require("./config.js");
+const { MODE, CURL_EXTRA } = require("./config.js");
 const { GsrtcError } = require("./errors.js");
 
 const impl = MODE === "http" ? require("./http-api.js") : require("./upstream.js");
@@ -31,9 +31,11 @@ async function serviceTypes() {
 
 module.exports = {
   MODE,
+  CURL_EXTRA,
   GsrtcError,
   serviceTypes,
   getHealth: impl.getHealth,
+  curlVersion: impl.curlVersion || (async () => "not available in http mode"),
   getStationList: impl.getStationList,
   getBusList: impl.getBusList,
   getDepotBusList: impl.getDepotBusList,
